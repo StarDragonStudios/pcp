@@ -1,1 +1,22 @@
-namespace PCP\Tests\Unit\Integration;
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.0.1-alpha.0] - 2026-03-10
+
+### Added
+- JSX-like PCP syntax
+- AST-based compiler
+- Component autoload + compile-on-demand
+- Runtime node system
+- Islands support
+- HMR development support
+- New slot syntax:
+  - `<Card\Header>...</Card\Header>`
+  - `<Slot:Header />` / `<Slot:Header></Slot:Header>`
+
+### Changed
+- Slots now compile to named `Node` constructor arguments
+
+### Removed
+- Legacy `slot="..."`

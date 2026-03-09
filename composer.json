@@ -43,6 +43,12 @@
     }
   },
 
+  "archive": {
+    "exclude": [
+      "tests/"
+    ]
+  },
+
   "suggest": {
     "symfony/yaml": "Allows loading PCP configuration from YAML files"
   },

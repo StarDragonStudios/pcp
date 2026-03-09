@@ -1,10 +1,10 @@
 <?php
 
-namespace PCP\Tests\Unit\Runtime;
+namespace PCP\Tests\Unit\Compiling;
 
 use PHPUnit\Framework\TestCase;
 
-class SlotRuntimeTest extends TestCase
+class CompilerTest extends TestCase
 {
     public function test_placeholder(): void
     {
