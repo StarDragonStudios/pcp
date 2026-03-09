@@ -350,9 +350,7 @@ final class Tokenizer
         while (!$this->isAtEnd($input)) {
             $char = $this->currentChar($input);
 
-            if (!preg_match('/[A-Za-z0-9:_-]/', $char)) {
-                break;
-            }
+            if (!preg_match('/[A-Za-z0-9:_\\\\-]/', $char)) break;
 
             $buffer .= $this->consumeChar($input);
         }

@@ -14,6 +14,8 @@ use PCP\AST\FragmentNode;
 use PCP\AST\IfNode;
 use PCP\AST\Node;
 use PCP\AST\TextNode;
+use PCP\AST\NamedSlotUsageNode;
+use PCP\AST\SlotOutletNode;
 use RuntimeException;
 
 final class PhpAstGenerator
@@ -33,6 +35,12 @@ final class PhpAstGenerator
             $node instanceof ExpressionNode => $this->generateExpression($node),
             $node instanceof IfNode => $this->generateIf($node),
             $node instanceof ForEachNode => $this->generateForEach($node),
+            $node instanceof SlotOutletNode => $this->generateSlotOutlet($node),
+            $node instanceof NamedSlotUsageNode => throw new RuntimeException(sprintf(
+                'Named slot usage node "%s\%s" cannot be generated outside a parent component context.',
+                $node->parentComponent,
+                $node->slotName,
+            )),
             default => throw new RuntimeException(sprintf(
                 'Unsupported AST node "%s".',
                 $node::class,
@@ -44,7 +52,7 @@ final class PhpAstGenerator
     {
         $children = $this->generateChildrenArray($node->children);
 
-        return "\\PCP\\Runtime\\Runtime::fragment({$children})";
+        return "\\PCP\\Runtime\\Runtime::fragment($children)";
     }
 
     private function generateElement(ElementNode $node): string
@@ -53,30 +61,24 @@ final class PhpAstGenerator
         $attributes = $this->generateAttributesArray($node->attributes);
         $children = $this->generateChildrenArray($node->children);
 
-        return "\\PCP\\Runtime\\Runtime::element({$tag}, {$attributes}, {$children})";
+        return "\\PCP\\Runtime\\Runtime::element($tag, $attributes, $children)";
     }
 
     private function generateComponent(ComponentNode $node): string
     {
         $componentClass = $this->normalizeComponentClass($node->component);
 
-        $constructorArgs = $this->generateNamedArguments($node->props);
+        [$namedNodeProps, $regularChildren] = $this->splitNamedNodeProps($node);
 
-        [$defaultChildren, $slots] = $this->splitComponentChildrenIntoSlots($node->children);
-
-        $childrenPhp = $this->generateChildrenArray($defaultChildren);
-        $slotsPhp = $this->generateSlotsArray($slots);
+        $constructorArgs = $this->generateNamedArguments($node->props, $namedNodeProps);
+        $children = $this->generateChildrenArray($regularChildren);
 
         return <<<PHP
         (static function () {
-            \$__pcp_component = new \\{$componentClass}({$constructorArgs});
+            \$__pcp_component = new \\$componentClass($constructorArgs);
         
             if (method_exists(\$__pcp_component, 'setChildren')) {
-                \$__pcp_component->setChildren({$childrenPhp});
-            }
-        
-            if (method_exists(\$__pcp_component, 'setSlots')) {
-                \$__pcp_component->setSlots({$slotsPhp});
+                \$__pcp_component->setChildren($children);
             }
         
             return \\PCP\\Runtime\\Runtime::normalizeChild(
@@ -93,13 +95,13 @@ final class PhpAstGenerator
 
     private function generateExpression(ExpressionNode $node): string
     {
-        return "\\PCP\\Runtime\\Runtime::normalizeChild({$node->expression})";
+        return "\\PCP\\Runtime\\Runtime::normalizeChild($node->expression)";
     }
 
     private function generateIf(IfNode $node): string
     {
         $php = "(static function (): \\PCP\\Runtime\\Node {\n";
-        $php .= "    if ({$node->condition}) {\n";
+        $php .= "    if ($node->condition) {\n";
         $php .= "        return " . $this->generateNodesAsFragmentOrSingle($node->then) . ";\n";
         $php .= "    }\n";
 
@@ -108,7 +110,7 @@ final class PhpAstGenerator
                 throw new RuntimeException('Invalid elseif branch node.');
             }
 
-            $php .= "    elseif ({$branch->condition}) {\n";
+            $php .= "    elseif ($branch->condition) {\n";
             $php .= "        return " . $this->generateNodesAsFragmentOrSingle($branch->body) . ";\n";
             $php .= "    }\n";
         }
@@ -214,28 +216,37 @@ final class PhpAstGenerator
 
     private function normalizeComponentClass(string $component): string
     {
-        if (str_contains($component, '\\')) return ltrim($component, '\\');
+        if (str_contains($component, '\\')) {
+            return ltrim($component, '\\');
+        }
 
         return 'App\\Components\\' . $component;
     }
 
     /**
      * @param list<AttributeNode> $attributes
+     * @param array<string, list<Node>> $namedNodeProps
      */
-    private function generateNamedArguments(array $attributes): string
+    private function generateNamedArguments(array $attributes, array $namedNodeProps = []): string
     {
-        if ($attributes === []) return '';
-
         $parts = [];
 
         foreach ($attributes as $attribute) {
-            if (!$attribute instanceof AttributeNode)
+            if (!$attribute instanceof AttributeNode) {
                 throw new RuntimeException('Invalid attribute node.');
+            }
 
             $parts[] =
                 $attribute->name .
                 ': ' .
                 $this->generateAttributeValue($attribute);
+        }
+
+        foreach ($namedNodeProps as $name => $children) {
+            $parts[] =
+                $name .
+                ': ' .
+                '\\PCP\\Runtime\\Runtime::fragment(' . $this->generateChildrenArray($children) . ')';
         }
 
         return implode(', ', $parts);
@@ -343,5 +354,46 @@ final class PhpAstGenerator
         }
 
         return '[' . implode(', ', $parts) . ']';
+    }
+
+    private function generateSlotOutlet(SlotOutletNode $node): string
+    {
+        $property = '$this->' . $this->normalizeSlotPropertyName($node->slotName);
+
+        return "(($property) ?? \\PCP\\Runtime\\Runtime::fragment([]))";
+    }
+
+    /**
+     * @return array{0: array<string, list<Node>>, 1: list<Node>}
+     */
+    private function splitNamedNodeProps(ComponentNode $component): array
+    {
+        $namedNodeProps = [];
+        $regularChildren = [];
+
+        foreach ($component->children as $child) {
+            if (!$child instanceof NamedSlotUsageNode) {
+                $regularChildren[] = $child;
+                continue;
+            }
+
+            if ($child->parentComponent !== $component->component) {
+                throw new RuntimeException(sprintf(
+                    'Named slot <%s\%s> must be a direct child of <%s>.',
+                    $child->parentComponent,
+                    $child->slotName,
+                    $component->component,
+                ));
+            }
+
+            $namedNodeProps[$this->normalizeSlotPropertyName($child->slotName)] = $child->children;
+        }
+
+        return [$namedNodeProps, $regularChildren];
+    }
+
+    private function normalizeSlotPropertyName(string $slotName): string
+    {
+        return lcfirst($slotName);
     }
 }

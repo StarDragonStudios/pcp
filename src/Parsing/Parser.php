@@ -14,6 +14,8 @@ use PCP\AST\FragmentNode;
 use PCP\AST\IfNode;
 use PCP\AST\Node;
 use PCP\AST\TextNode;
+use PCP\AST\NamedSlotUsageNode;
+use PCP\AST\SlotOutletNode;
 use RuntimeException;
 
 final class Parser
@@ -115,6 +117,45 @@ final class Parser
             return new FragmentNode($children);
         }
 
+        if ($this->isSlotOutletTag($name)) {
+            $children = $this->parseNodesUntil(function (Token $token) use ($name): bool {
+                return $token->type === TokenType::CloseTag
+                    && ($token->value['fragment'] ?? false) === false
+                    && ($token->value['name'] ?? null) === $name;
+            });
+
+            $this->consumeNamedCloseTag($name);
+
+            if (count($children) > 1) {
+                throw new RuntimeException(sprintf(
+                    'Slot outlet <%s> can contain at most one child node.',
+                    $name,
+                ));
+            }
+
+            return new SlotOutletNode(
+                $this->normalizeSlotName(substr($name, strlen('Slot:')))
+            );
+        }
+
+        if ($this->isNamedSlotUsageTag($name)) {
+            [$parentComponent, $slotName] = $this->splitNamedSlotUsageTag($name);
+
+            $children = $this->parseNodesUntil(function (Token $token) use ($name): bool {
+                return $token->type === TokenType::CloseTag
+                    && ($token->value['fragment'] ?? false) === false
+                    && ($token->value['name'] ?? null) === $name;
+            });
+
+            $this->consumeNamedCloseTag($name);
+
+            return new NamedSlotUsageNode(
+                $parentComponent,
+                $this->normalizeSlotName($slotName),
+                $children,
+            );
+        }
+
         $children = $this->parseNodesUntil(function (Token $token) use ($name): bool {
             return $token->type === TokenType::CloseTag
                 && ($token->value['fragment'] ?? false) === false
@@ -141,6 +182,22 @@ final class Parser
 
         if ($fragment) {
             return new FragmentNode([]);
+        }
+
+        if ($this->isSlotOutletTag($name)) {
+            return new SlotOutletNode(
+                $this->normalizeSlotName(substr($name, strlen('Slot:')))
+            );
+        }
+
+        if ($this->isNamedSlotUsageTag($name)) {
+            [$parentComponent, $slotName] = $this->splitNamedSlotUsageTag($name);
+
+            return new NamedSlotUsageNode(
+                $parentComponent,
+                $this->normalizeSlotName($slotName),
+                [],
+            );
         }
 
         if ($component) {
@@ -368,5 +425,37 @@ final class Parser
     private function isAtEnd(): bool
     {
         return $this->position >= count($this->tokens);
+    }
+
+    private function isNamedSlotUsageTag(string $name): bool
+    {
+        return str_contains($name, '\\');
+    }
+
+    private function isSlotOutletTag(string $name): bool
+    {
+        return str_starts_with($name, 'Slot:');
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function splitNamedSlotUsageTag(string $name): array
+    {
+        $parts = explode('\\', $name, 2);
+
+        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+            throw new RuntimeException(sprintf(
+                'Invalid named slot usage tag "%s".',
+                $name,
+            ));
+        }
+
+        return [$parts[0], $parts[1]];
+    }
+
+    private function normalizeSlotName(string $name): string
+    {
+        return lcfirst($name);
     }
 }

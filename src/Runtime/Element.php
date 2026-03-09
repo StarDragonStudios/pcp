@@ -7,6 +7,26 @@ namespace PCP\Runtime;
 final class Element extends Node
 {
     /**
+     * @var array<string, true>
+     */
+    private const array VOID_ELEMENTS = [
+        'area' => true,
+        'base' => true,
+        'br' => true,
+        'col' => true,
+        'embed' => true,
+        'hr' => true,
+        'img' => true,
+        'input' => true,
+        'link' => true,
+        'meta' => true,
+        'param' => true,
+        'source' => true,
+        'track' => true,
+        'wbr' => true,
+    ];
+
+    /**
      * @param array<string, mixed> $attributes
      * @param list<Node|string|int|float|bool|null> $children
      */
@@ -19,14 +39,20 @@ final class Element extends Node
 
     public function toHtml(): string
     {
+        $tag = strtolower($this->tag);
         $attributes = $this->renderAttributes();
-        $html = '<' . $this->tag . $attributes . '>';
+
+        if ($this->isVoidElement($tag)) {
+            return '<' . $tag . $attributes . '>';
+        }
+
+        $html = '<' . $tag . $attributes . '>';
 
         foreach ($this->children as $child) {
             $html .= Runtime::normalizeChild($child)->toHtml();
         }
 
-        $html .= '</' . $this->tag . '>';
+        $html .= '</' . $tag . '>';
 
         return $html;
     }
@@ -57,5 +83,10 @@ final class Element extends Node
         }
 
         return $parts === [] ? '' : ' ' . implode(' ', $parts);
+    }
+
+    private function isVoidElement(string $tag): bool
+    {
+        return isset(self::VOID_ELEMENTS[$tag]);
     }
 }
