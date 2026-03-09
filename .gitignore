@@ -1,0 +1,7 @@
+.idea
+.phpunit.cache
+tests
+vendor
+composer.lock
+phpunit.xml
+Component.pcp
