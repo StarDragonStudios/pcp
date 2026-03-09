@@ -47,6 +47,6 @@
     "symfony/yaml": "Allows loading PCP configuration from YAML files"
   },
 
-  "minimum-stability": "stable",
+  "minimum-stability": "alpha",
   "prefer-stable": true
 }
