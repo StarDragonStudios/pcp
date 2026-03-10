@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+msg_file="$1"
+msg="$(head -n1 "$msg_file")"
+
+if ! echo "$msg" | grep -Eq '^(feat|fix|docs|test|refactor|release|chore)(\(.+\))?: '; then
+  echo "Invalid commit message."
+  echo "Use: feat:, fix:, docs:, test:, refactor:, release:, chore:"
+  exit 1
+fi

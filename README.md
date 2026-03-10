@@ -1,4 +1,6 @@
-
+![Tests](https://github.com/StarDragonStudios/pcp/actions/workflows/tests.yml/badge.svg)
+![Packagist Version](https://img.shields.io/packagist/v/pcp/pcp)
+![License](https://img.shields.io/github/license/StarDragonStudios/pcp)
 # PCP — Preprocessed Component Pages
 
 PCP is a component-based templating system for PHP inspired by modern UI frameworks like React, but compiled to pure PHP.
