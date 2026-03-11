@@ -45,8 +45,7 @@ final class ElementTest extends TestCase
         ]);
 
         self::assertSame(
-            '<img src="/
-logo.png" alt="Logo">',
+            '<img src="/logo.png" alt="Logo">',
             $element->toHtml(),
         );
     }
