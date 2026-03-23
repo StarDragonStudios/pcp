@@ -6,8 +6,12 @@ namespace PCP\AST;
 
 final class SlotOutletNode extends Node
 {
+    /**
+     * @param string $slotName
+     * @param list<Node> $fallbackChildren
+     */
     public function __construct(
         public string $slotName,
-    ) {
-    }
+        public array $fallbackChildren = []
+    ) {}
 }

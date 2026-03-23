@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PCP\Runtime;
 
-use JsonException;
 use PCP\Component;
 use PCP\Core\ComponentMetadataResolver;
 use RuntimeException;
@@ -39,12 +38,24 @@ final class Runtime
     }
 
     /**
+     * @param list<Node|string|int|float|bool|null> $children
+     */
+    public static function renderChildren(array $children): Node
+    {
+        return self::fragment($children);
+    }
+
+    /**
      * @param array<string, mixed> $props
      * @param list<Node|string|int|float|bool|null> $children
-     * @throws JsonException
+     * @param array<string, Node|null> $nodeProps
      */
-    public static function component(string $component, array $props = [], array $children = []): Node
-    {
+    public static function component(
+        string $component,
+        array $props = [],
+        array $children = [],
+        array $nodeProps = [],
+    ): Node {
         if (!class_exists($component)) {
             throw new RuntimeException(sprintf(
                 'PCP component class "%s" does not exist.',
@@ -60,19 +71,18 @@ final class Runtime
             ));
         }
 
+        /** @var Component $instance */
         $instance = new $component(...$props);
 
         if (method_exists($instance, 'setChildren')) {
             $instance->setChildren($children);
         }
 
-        if (method_exists($instance, 'setSlots')) {
-            $instance->setSlots([
-                'default' => $children,
-            ]);
+        if (method_exists($instance, '__pcpSetNodeProps')) {
+            $instance->__pcpSetNodeProps($nodeProps);
         }
 
-        $metadata = new ComponentMetadataResolver()->resolve($component);
+        $metadata = (new ComponentMetadataResolver())->resolve($component);
 
         if ($metadata->clientSide) {
             throw new RuntimeException(sprintf(
@@ -115,9 +125,6 @@ final class Runtime
         ));
     }
 
-    /**
-     * @throws JsonException
-     */
     private static function renderIsland(
         string $component,
         Component $instance,
@@ -171,18 +178,15 @@ final class Runtime
         }
 
         if (is_array($value)) {
-            return array_all($value, fn($item) => self::isSerializableValue($item));
+            foreach ($value as $item) {
+                if (!self::isSerializableValue($item)) {
+                    return false;
+                }
+            }
 
+            return true;
         }
 
         return false;
-    }
-
-    /**
-     * @param list<Node|string|int|float|bool|null> $children
-     */
-    public static function renderChildren(array $children): Node
-    {
-        return self::fragment($children);
     }
 }

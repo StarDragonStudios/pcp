@@ -12,10 +12,10 @@ use PCP\AST\ExpressionNode;
 use PCP\AST\ForEachNode;
 use PCP\AST\FragmentNode;
 use PCP\AST\IfNode;
-use PCP\AST\Node;
-use PCP\AST\TextNode;
 use PCP\AST\NamedSlotUsageNode;
+use PCP\AST\Node;
 use PCP\AST\SlotOutletNode;
+use PCP\AST\TextNode;
 use RuntimeException;
 
 final class Parser
@@ -126,15 +126,9 @@ final class Parser
 
             $this->consumeNamedCloseTag($name);
 
-            if (count($children) > 1) {
-                throw new RuntimeException(sprintf(
-                    'Slot outlet <%s> can contain at most one child node.',
-                    $name,
-                ));
-            }
-
             return new SlotOutletNode(
-                $this->normalizeSlotName(substr($name, strlen('Slot:')))
+                $this->normalizeSlotName(substr($name, strlen('Slot:'))),
+                $children,
             );
         }
 
@@ -186,7 +180,8 @@ final class Parser
 
         if ($this->isSlotOutletTag($name)) {
             return new SlotOutletNode(
-                $this->normalizeSlotName(substr($name, strlen('Slot:')))
+                $this->normalizeSlotName(substr($name, strlen('Slot:'))),
+                [],
             );
         }
 

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PCP;
 
 use PCP\Runtime\Node;
+use ReflectionClass;
+use ReflectionException;
 
 abstract class Component
 {
@@ -16,9 +18,11 @@ abstract class Component
     protected array $children = [];
 
     /**
-     * @var array<string, list<Node|string|int|float|bool|null>>
+     * Node props implícitas/nombradas inyectadas por PCP.
+     *
+     * @var array<string, Node|null>
      */
-    protected array $slots = [];
+    private array $__pcpNodeProps = [];
 
     public function __construct(array $state = [])
     {
@@ -31,15 +35,7 @@ abstract class Component
     public function setChildren(array $children): static
     {
         $this->children = $children;
-        return $this;
-    }
 
-    /**
-     * @param array<string, list<Node|string|int|float|bool|null>> $slots
-     */
-    public function setSlots(array $slots): static
-    {
-        $this->slots = $slots;
         return $this;
     }
 
@@ -49,19 +45,6 @@ abstract class Component
     public function children(): array
     {
         return $this->children;
-    }
-
-    /**
-     * @return list<Node|string|int|float|bool|null>
-     */
-    public function slot(string $name = 'default'): array
-    {
-        return $this->slots[$name] ?? [];
-    }
-
-    public function hasSlot(string $name = 'default'): bool
-    {
-        return ($this->slots[$name] ?? []) !== [];
     }
 
     public function state(): array
@@ -77,13 +60,43 @@ abstract class Component
     public function setState(string $key, mixed $value): static
     {
         $this->state[$key] = $value;
+
         return $this;
     }
 
     public function mergeState(array $state): static
     {
         $this->state = array_replace($this->state, $state);
+
         return $this;
+    }
+
+    /**
+     * Inyecta node props nombradas:
+     * - si existe una propiedad real compatible, la rellena por reflection
+     * - si no existe, queda disponible vía __get/__isset
+     *
+     * @param array<string, Node|null> $nodeProps
+     */
+    public function __pcpSetNodeProps(array $nodeProps): static
+    {
+        foreach ($nodeProps as $name => $value) {
+            $this->__pcpNodeProps[$name] = $value;
+            $this->hydrateDeclaredPropertyIfPresent($name, $value);
+        }
+
+        return $this;
+    }
+
+    public function __get(string $name): mixed
+    {
+        return $this->__pcpNodeProps[$name] ?? null;
+    }
+
+    public function __isset(string $name): bool
+    {
+        return array_key_exists($name, $this->__pcpNodeProps)
+            && $this->__pcpNodeProps[$name] !== null;
     }
 
     /**
@@ -95,10 +108,36 @@ abstract class Component
     {
         $vars = get_object_vars($this);
 
-        unset($vars['state'], $vars['children'], $vars['slots']);
+        unset(
+            $vars['state'],
+            $vars['children'],
+            $vars['__pcpNodeProps'],
+        );
 
         return $vars;
     }
 
     abstract public function render(): Node|string|int|float|bool|null;
+
+    private function hydrateDeclaredPropertyIfPresent(string $name, ?Node $value): void
+    {
+        try {
+            $reflection = new ReflectionClass($this);
+
+            while ($reflection !== false) {
+                if ($reflection->hasProperty($name)) {
+                    $property = $reflection->getProperty($name);
+                    $property->setAccessible(true);
+                    $property->setValue($this, $value);
+
+                    return;
+                }
+
+                $reflection = $reflection->getParentClass();
+            }
+        } catch (ReflectionException) {
+            // Si falla reflection por cualquier razón, mantenemos el valor
+            // en $__pcpNodeProps y seguirá funcionando vía __get/__isset.
+        }
+    }
 }

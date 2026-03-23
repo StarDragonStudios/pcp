@@ -11,9 +11,6 @@ use PHPUnit\Framework\TestCase;
 
 final class RuntimeComponentTest extends TestCase
 {
-    /**
-     * @throws \JsonException
-     */
     public function test_component_renders_basic_component(): void
     {
         $node = Runtime::component(BasicGreetingComponent::class, [
@@ -27,9 +24,6 @@ final class RuntimeComponentTest extends TestCase
         );
     }
 
-    /**
-     * @throws \JsonException
-     */
     public function test_component_passes_children_to_component(): void
     {
         $node = Runtime::component(ChildrenEchoComponent::class, [], [
@@ -47,26 +41,28 @@ final class RuntimeComponentTest extends TestCase
         );
     }
 
-    /**
-     * @throws \JsonException
-     */
-    public function test_component_supports_default_slot(): void
+    public function test_component_injects_implicit_node_props(): void
     {
-        $node = Runtime::component(SlotEchoComponent::class, [], [
-            Runtime::element('p', [], [
-                Runtime::text('Contenido'),
-            ]),
-        ]);
+        $node = Runtime::component(
+            ImplicitNodePropsComponent::class,
+            [],
+            [],
+            [
+                'header' => Runtime::element('h1', [], [
+                    Runtime::text('Cabecera'),
+                ]),
+                'body' => Runtime::element('p', [], [
+                    Runtime::text('Contenido'),
+                ]),
+            ],
+        );
 
         self::assertSame(
-            '<section><p>Contenido</p></section>',
+            '<article><header><h1>Cabecera</h1></header><main><p>Contenido</p></main></article>',
             $node->toHtml(),
         );
     }
 
-    /**
-     * @throws \JsonException
-     */
     public function test_component_throws_for_missing_class(): void
     {
         $this->expectException(\RuntimeException::class);
@@ -75,9 +71,6 @@ final class RuntimeComponentTest extends TestCase
         Runtime::component('App\\Components\\MissingComponent');
     }
 
-    /**
-     * @throws \JsonException
-     */
     public function test_component_throws_for_non_component_class(): void
     {
         $this->expectException(\RuntimeException::class);
@@ -115,12 +108,17 @@ final class ChildrenEchoComponent extends Component
     }
 }
 
-final class SlotEchoComponent extends Component
+final class ImplicitNodePropsComponent extends Component
 {
     public function render(): Node|string|int|float|bool|null
     {
-        return Runtime::element('section', [], [
-            Runtime::renderChildren($this->slot('default')),
+        return Runtime::element('article', [], [
+            Runtime::element('header', [], [
+                $this->header,
+            ]),
+            Runtime::element('main', [], [
+                $this->body,
+            ]),
         ]);
     }
 }

@@ -38,10 +38,11 @@ final class PhpAstGeneratorSlotsTest extends TestCase
 
         $php = $generator->generate($ast);
 
-        self::assertStringContainsString('header:', $php);
-        self::assertStringContainsString('body:', $php);
-        self::assertStringContainsString('footer:', $php);
+        self::assertStringContainsString("'header' =>", $php);
+        self::assertStringContainsString("'body' =>", $php);
+        self::assertStringContainsString("'footer' =>", $php);
         self::assertStringContainsString('Runtime::fragment', $php);
+        self::assertStringContainsString('Runtime::component', $php);
     }
 
     public function test_generator_emits_slot_outlet_as_property_lookup(): void
@@ -56,5 +57,22 @@ final class PhpAstGeneratorSlotsTest extends TestCase
 
         self::assertStringContainsString('$this->header', $php);
         self::assertStringContainsString('Runtime::fragment([])', $php);
+    }
+
+    public function test_generator_emits_slot_outlet_with_fallback(): void
+    {
+        $generator = new PhpAstGenerator();
+
+        $ast = new FragmentNode([
+            new SlotOutletNode('header', [
+                new TextNode('Default header'),
+            ]),
+        ]);
+
+        $php = $generator->generate($ast);
+
+        self::assertStringContainsString('$this->header', $php);
+        self::assertStringContainsString('Default header', $php);
+        self::assertStringContainsString('Runtime::fragment', $php);
     }
 }

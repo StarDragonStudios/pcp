@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PCP\Tests\Unit\Integration;
+namespace PCP\Tests\Integration;
 
 use PCP\Compiling\Compiler;
 use PCP\Core\ComponentPathResolver;
@@ -53,21 +53,13 @@ final class CompilerSlotsIntegrationTest extends TestCase
         
         final class Card extends Component
         {
-            public function __construct(
-                private ?Node $header = null,
-                private ?Node $body = null,
-                private ?Node $footer = null,
-            ) {
-                parent::__construct();
-            }
-        
             public function render(): Node
             {
                 return (
                     <article>
-                        <div class="card__header"><Slot:Header>{ $this->header }</Slot:Header></div>
-                        <div class="card__body"><Slot:Body>{ $this->body }</Slot:Body></div>
-                        <div class="card__footer"><Slot:Footer>{ $this->footer }</Slot:Footer></div>
+                        <div class="card__header"><Slot:Header /></div>
+                        <div class="card__body"><Slot:Body /></div>
+                        <div class="card__footer"><Slot:Footer /></div>
                     </article>
                 );
             }
@@ -111,9 +103,9 @@ final class CompilerSlotsIntegrationTest extends TestCase
         $pageCompiled = $compiler->compileIfNeeded('App\\Components\\Page', $pageSource);
         require $pageCompiled;
 
-        self::assertStringContainsString('header:', file_get_contents($pageCompiled));
-        self::assertStringContainsString('body:', file_get_contents($pageCompiled));
-        self::assertStringContainsString('footer:', file_get_contents($pageCompiled));
+        self::assertStringContainsString("'header' =>", file_get_contents($pageCompiled));
+        self::assertStringContainsString("'body' =>", file_get_contents($pageCompiled));
+        self::assertStringContainsString("'footer' =>", file_get_contents($pageCompiled));
 
         self::assertStringContainsString('$this->header', file_get_contents($cardCompiled));
         self::assertStringContainsString('$this->body', file_get_contents($cardCompiled));
@@ -125,6 +117,91 @@ final class CompilerSlotsIntegrationTest extends TestCase
 
         self::assertSame(
             '<article><div class="card__header"><header>Cabecera</header></div><div class="card__body"><p>Contenido principal</p></div><div class="card__footer"><footer>Pie</footer></div></article>',
+            $this->normalizeHtml($html),
+        );
+    }
+
+    public function test_compiler_handles_slot_fallback_end_to_end(): void
+    {
+        $componentsDir = $this->tmpDir . DIRECTORY_SEPARATOR . 'components_fallback';
+        $cacheDir = $this->tmpDir . DIRECTORY_SEPARATOR . 'cache_fallback';
+
+        $appComponentsDir = $componentsDir
+            . DIRECTORY_SEPARATOR . 'App'
+            . DIRECTORY_SEPARATOR . 'Components';
+
+        mkdir($appComponentsDir, 0777, true);
+        mkdir($cacheDir);
+
+        file_put_contents($appComponentsDir . DIRECTORY_SEPARATOR . 'CardFallback.pcp', <<<'PCP'
+        namespace App\Components;
+        
+        use PCP\Component;
+        use PCP\Runtime\Node;
+        
+        final class CardFallback extends Component
+        {
+            public function render(): Node
+            {
+                return (
+                    <article>
+                        <div class="card__header">
+                            <Slot:Header><h1>Header por defecto</h1></Slot:Header>
+                        </div>
+                        <div class="card__body">
+                            <Slot:Body />
+                        </div>
+                    </article>
+                );
+            }
+        }
+        PCP);
+
+        file_put_contents($appComponentsDir . DIRECTORY_SEPARATOR . 'PageFallback.pcp', <<<'PCP'
+        namespace App\Components;
+        
+        use PCP\Component;
+        use PCP\Runtime\Node;
+        
+        final class PageFallback extends Component
+        {
+            public function render(): Node
+            {
+                return (
+                    <CardFallback>
+                        <CardFallback\Body><p>Contenido principal</p></CardFallback\Body>
+                    </CardFallback>
+                );
+            }
+        }
+        PCP);
+
+        $config = PCPConfig::defaults();
+        $config->roots = [$componentsDir];
+        $config->cacheDir = $cacheDir;
+        $config->env = Env::Dev;
+
+        $resolver = new ComponentPathResolver($config);
+        $compiler = new Compiler($config);
+
+        $cardSource = $resolver->requireComponent('App\\Components\\CardFallback');
+        $cardCompiled = $compiler->compileIfNeeded('App\\Components\\CardFallback', $cardSource);
+        require $cardCompiled;
+
+        $pageSource = $resolver->requireComponent('App\\Components\\PageFallback');
+        $pageCompiled = $compiler->compileIfNeeded('App\\Components\\PageFallback', $pageSource);
+        require $pageCompiled;
+
+        self::assertStringContainsString('Header por defecto', file_get_contents($cardCompiled));
+        self::assertStringContainsString('$this->header', file_get_contents($cardCompiled));
+        self::assertStringContainsString('$this->body', file_get_contents($cardCompiled));
+
+        $page = new \App\Components\PageFallback();
+
+        $html = $page->render()->toHtml();
+
+        self::assertSame(
+            '<article><div class="card__header"><h1>Header por defecto</h1></div><div class="card__body"><p>Contenido principal</p></div></article>',
             $this->normalizeHtml($html),
         );
     }

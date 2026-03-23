@@ -12,10 +12,10 @@ use PCP\AST\ExpressionNode;
 use PCP\AST\ForEachNode;
 use PCP\AST\FragmentNode;
 use PCP\AST\IfNode;
-use PCP\AST\Node;
-use PCP\AST\TextNode;
 use PCP\AST\NamedSlotUsageNode;
+use PCP\AST\Node;
 use PCP\AST\SlotOutletNode;
+use PCP\AST\TextNode;
 use RuntimeException;
 
 final class PhpAstGenerator
@@ -52,7 +52,7 @@ final class PhpAstGenerator
     {
         $children = $this->generateChildrenArray($node->children);
 
-        return "\\PCP\\Runtime\\Runtime::fragment($children)";
+        return "\\PCP\\Runtime\\Runtime::fragment({$children})";
     }
 
     private function generateElement(ElementNode $node): string
@@ -61,31 +61,19 @@ final class PhpAstGenerator
         $attributes = $this->generateAttributesArray($node->attributes);
         $children = $this->generateChildrenArray($node->children);
 
-        return "\\PCP\\Runtime\\Runtime::element($tag, $attributes, $children)";
+        return "\\PCP\\Runtime\\Runtime::element({$tag}, {$attributes}, {$children})";
     }
 
     private function generateComponent(ComponentNode $node): string
     {
-        $componentClass = $this->normalizeComponentClass($node->component);
-
+        $componentClass = var_export($this->normalizeComponentClass($node->component), true);
         [$namedNodeProps, $regularChildren] = $this->splitNamedNodeProps($node);
 
-        $constructorArgs = $this->generateNamedArguments($node->props, $namedNodeProps);
+        $props = $this->generateAttributesArray($node->props);
         $children = $this->generateChildrenArray($regularChildren);
+        $nodeProps = $this->generateNamedNodePropsArray($namedNodeProps);
 
-        return <<<PHP
-        (static function () {
-            \$__pcp_component = new \\$componentClass($constructorArgs);
-        
-            if (method_exists(\$__pcp_component, 'setChildren')) {
-                \$__pcp_component->setChildren($children);
-            }
-        
-            return \\PCP\\Runtime\\Runtime::normalizeChild(
-                \$__pcp_component->render()
-            );
-        })()
-        PHP;
+        return "\\PCP\\Runtime\\Runtime::component({$componentClass}, {$props}, {$children}, {$nodeProps})";
     }
 
     private function generateText(TextNode $node): string
@@ -95,13 +83,13 @@ final class PhpAstGenerator
 
     private function generateExpression(ExpressionNode $node): string
     {
-        return "\\PCP\\Runtime\\Runtime::normalizeChild($node->expression)";
+        return "\\PCP\\Runtime\\Runtime::normalizeChild({$node->expression})";
     }
 
     private function generateIf(IfNode $node): string
     {
         $php = "(static function (): \\PCP\\Runtime\\Node {\n";
-        $php .= "    if ($node->condition) {\n";
+        $php .= "    if ({$node->condition}) {\n";
         $php .= "        return " . $this->generateNodesAsFragmentOrSingle($node->then) . ";\n";
         $php .= "    }\n";
 
@@ -110,7 +98,7 @@ final class PhpAstGenerator
                 throw new RuntimeException('Invalid elseif branch node.');
             }
 
-            $php .= "    elseif ($branch->condition) {\n";
+            $php .= "    elseif ({$branch->condition}) {\n";
             $php .= "        return " . $this->generateNodesAsFragmentOrSingle($branch->body) . ";\n";
             $php .= "    }\n";
         }
@@ -133,16 +121,27 @@ final class PhpAstGenerator
         $bodyExpr = $this->generateNodesAsFragmentOrSingle($node->body);
 
         return <<<PHP
-        (static function (): \PCP\Runtime\Node {
-            \$__pcp_children = [];
-        
-            foreach ($node->expression) {
-                \$__pcp_children[] = $bodyExpr;
-            }
-        
-            return \PCP\Runtime\Runtime::fragment(\$__pcp_children);
-        })()
-        PHP;
+(static function (): \PCP\Runtime\Node {
+    \$__pcp_children = [];
+
+    foreach ({$node->expression}) {
+        \$__pcp_children[] = {$bodyExpr};
+    }
+
+    return \PCP\Runtime\Runtime::fragment(\$__pcp_children);
+})()
+PHP;
+    }
+
+    private function generateSlotOutlet(SlotOutletNode $node): string
+    {
+        $property = '$this->' . $this->normalizeSlotPropertyName($node->slotName);
+
+        if ($node->fallbackChildren === []) {
+            return "(($property) ?? \\PCP\\Runtime\\Runtime::fragment([]))";
+        }
+
+        return "(($property) ?? \\PCP\\Runtime\\Runtime::fragment(" . $this->generateChildrenArray($node->fallbackChildren) . "))";
     }
 
     /**
@@ -181,6 +180,27 @@ final class PhpAstGenerator
     }
 
     /**
+     * @param array<string, list<Node>> $namedNodeProps
+     */
+    private function generateNamedNodePropsArray(array $namedNodeProps): string
+    {
+        if ($namedNodeProps === []) {
+            return '[]';
+        }
+
+        $parts = [];
+
+        foreach ($namedNodeProps as $name => $children) {
+            $parts[] =
+                var_export($name, true)
+                . ' => '
+                . '\\PCP\\Runtime\\Runtime::fragment(' . $this->generateChildrenArray($children) . ')';
+        }
+
+        return '[' . implode(', ', $parts) . ']';
+    }
+
+    /**
      * @param list<Node> $children
      */
     private function generateChildrenArray(array $children): string
@@ -212,155 +232,6 @@ final class PhpAstGenerator
         }
 
         return '\\PCP\\Runtime\\Runtime::fragment(' . $this->generateChildrenArray($nodes) . ')';
-    }
-
-    private function normalizeComponentClass(string $component): string
-    {
-        if (str_contains($component, '\\')) {
-            return ltrim($component, '\\');
-        }
-
-        return 'App\\Components\\' . $component;
-    }
-
-    /**
-     * @param list<AttributeNode> $attributes
-     * @param array<string, list<Node>> $namedNodeProps
-     */
-    private function generateNamedArguments(array $attributes, array $namedNodeProps = []): string
-    {
-        $parts = [];
-
-        foreach ($attributes as $attribute) {
-            if (!$attribute instanceof AttributeNode) {
-                throw new RuntimeException('Invalid attribute node.');
-            }
-
-            $parts[] =
-                $attribute->name .
-                ': ' .
-                $this->generateAttributeValue($attribute);
-        }
-
-        foreach ($namedNodeProps as $name => $children) {
-            $parts[] =
-                $name .
-                ': ' .
-                '\\PCP\\Runtime\\Runtime::fragment(' . $this->generateChildrenArray($children) . ')';
-        }
-
-        return implode(', ', $parts);
-    }
-
-    /**
-     * @param list<Node> $children
-     * @return array{0: list<Node>, 1: array<string, list<Node>>}
-     */
-    private function splitComponentChildrenIntoSlots(array $children): array
-    {
-        $defaultChildren = [];
-        $slots = [];
-
-        foreach ($children as $child) {
-            [$slotName, $normalizedChild] = $this->extractSlotFromChild($child);
-
-            if ($slotName === null) {
-                $defaultChildren[] = $normalizedChild;
-                $slots['default'][] = $normalizedChild;
-                continue;
-            }
-
-            $slots[$slotName][] = $normalizedChild;
-        }
-
-        if (!isset($slots['default'])) {
-            $slots['default'] = $defaultChildren;
-        }
-
-        return [$defaultChildren, $slots];
-    }
-
-    /**
-     * @return array{0:?string,1:Node}
-     */
-    private function extractSlotFromChild(Node $child): array
-    {
-        if ($child instanceof ElementNode) {
-            $slotName = null;
-            $attributes = [];
-
-            foreach ($child->attributes as $attribute) {
-                if (
-                    $attribute instanceof AttributeNode &&
-                    $attribute->name === 'slot' &&
-                    is_string($attribute->value)
-                ) {
-                    $slotName = $attribute->value;
-                    continue;
-                }
-
-                $attributes[] = $attribute;
-            }
-
-            if ($slotName !== null) {
-                return [
-                    $slotName,
-                    new ElementNode($child->tag, $attributes, $child->children),
-                ];
-            }
-        }
-
-        if ($child instanceof ComponentNode) {
-            $slotName = null;
-            $props = [];
-
-            foreach ($child->props as $attribute) {
-                if (
-                    $attribute instanceof AttributeNode &&
-                    $attribute->name === 'slot' &&
-                    is_string($attribute->value)
-                ) {
-                    $slotName = $attribute->value;
-                    continue;
-                }
-
-                $props[] = $attribute;
-            }
-
-            if ($slotName !== null) {
-                return [
-                    $slotName,
-                    new ComponentNode($child->component, $props, $child->children),
-                ];
-            }
-        }
-
-        return [null, $child];
-    }
-
-    /**
-     * @param array<string, list<Node>> $slots
-     */
-    private function generateSlotsArray(array $slots): string
-    {
-        if ($slots === []) {
-            return '[]';
-        }
-
-        $parts = [];
-
-        foreach ($slots as $name => $children) {
-            $parts[] = var_export($name, true) . ' => ' . $this->generateChildrenArray($children);
-        }
-
-        return '[' . implode(', ', $parts) . ']';
-    }
-
-    private function generateSlotOutlet(SlotOutletNode $node): string
-    {
-        $property = '$this->' . $this->normalizeSlotPropertyName($node->slotName);
-
-        return "(($property) ?? \\PCP\\Runtime\\Runtime::fragment([]))";
     }
 
     /**
@@ -395,5 +266,14 @@ final class PhpAstGenerator
     private function normalizeSlotPropertyName(string $slotName): string
     {
         return lcfirst($slotName);
+    }
+
+    private function normalizeComponentClass(string $component): string
+    {
+        if (str_contains($component, '\\')) {
+            return ltrim($component, '\\');
+        }
+
+        return 'App\\Components\\' . $component;
     }
 }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PCP\Tests\Unit\Integration;
+namespace PCP\Tests\Integration;
 
 use PCP\Env;
 use PCP\PCP;
