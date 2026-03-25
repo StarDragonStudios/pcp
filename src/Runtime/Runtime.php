@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PCP\Runtime;
 
+use JsonException;
 use PCP\Component;
 use PCP\Core\ComponentMetadataResolver;
 use RuntimeException;
@@ -49,6 +50,8 @@ final class Runtime
      * @param array<string, mixed> $props
      * @param list<Node|string|int|float|bool|null> $children
      * @param array<string, Node|null> $nodeProps
+     *
+     * @throws JsonException
      */
     public static function component(
         string $component,

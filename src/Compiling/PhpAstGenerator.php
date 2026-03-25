@@ -20,6 +20,13 @@ use RuntimeException;
 
 final class PhpAstGenerator
 {
+    private string $currentNamespace = '';
+
+    public function setNamespace(string $namespace): void
+    {
+        $this->currentNamespace = $namespace;
+    }
+
     public function generate(Node $node): string
     {
         return $this->generateNode($node);
@@ -250,14 +257,18 @@ PHP;
 
             if ($child->parentComponent !== $component->component) {
                 throw new RuntimeException(sprintf(
-                    'Named slot <%s\%s> must be a direct child of <%s>.',
+                    'Named slot <%s\\%s> must be a direct child of <%s>.',
                     $child->parentComponent,
-                    $child->slotName,
+                    ucfirst($child->slotName),
                     $component->component,
                 ));
             }
 
             $namedNodeProps[$this->normalizeSlotPropertyName($child->slotName)] = $child->children;
+        }
+
+        if ($regularChildren !== []) {
+            $namedNodeProps['default'] = $regularChildren;
         }
 
         return [$namedNodeProps, $regularChildren];
@@ -272,6 +283,10 @@ PHP;
     {
         if (str_contains($component, '\\')) {
             return ltrim($component, '\\');
+        }
+
+        if ($this->currentNamespace !== '') {
+            return $this->currentNamespace . '\\' . $component;
         }
 
         return 'App\\Components\\' . $component;

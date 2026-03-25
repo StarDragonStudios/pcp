@@ -84,4 +84,40 @@ final class ParserSlotsSyntaxTest extends TestCase
         self::assertSame('header', $node->slotName);
         self::assertNotEmpty($node->fallbackChildren);
     }
+
+    public function test_parse_default_slot_outlet_self_closing(): void
+    {
+        $tokenizer = new Tokenizer();
+        $parser = new Parser();
+
+        $tokens = $tokenizer->tokenize('<Slot:default />');
+        $ast = $parser->parse($tokens);
+
+        self::assertInstanceOf(FragmentNode::class, $ast);
+        self::assertCount(1, $ast->children);
+
+        $node = $ast->children[0];
+
+        self::assertInstanceOf(SlotOutletNode::class, $node);
+        self::assertSame('default', $node->slotName);
+        self::assertSame([], $node->fallbackChildren);
+    }
+
+    public function test_parse_default_slot_outlet_with_fallback(): void
+    {
+        $tokenizer = new Tokenizer();
+        $parser = new Parser();
+
+        $tokens = $tokenizer->tokenize('<Slot:default><p>Fallback</p></Slot:default>');
+        $ast = $parser->parse($tokens);
+
+        self::assertInstanceOf(FragmentNode::class, $ast);
+        self::assertCount(1, $ast->children);
+
+        $node = $ast->children[0];
+
+        self::assertInstanceOf(SlotOutletNode::class, $node);
+        self::assertSame('default', $node->slotName);
+        self::assertCount(1, $node->fallbackChildren);
+    }
 }

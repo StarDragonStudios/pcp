@@ -45,6 +45,26 @@ final class PhpAstGeneratorSlotsTest extends TestCase
         self::assertStringContainsString('Runtime::component', $php);
     }
 
+    public function test_generator_maps_regular_children_to_default_node_prop(): void
+    {
+        $generator = new PhpAstGenerator();
+
+        $ast = new FragmentNode([
+            new ComponentNode(
+                'Card',
+                [],
+                [
+                    new TextNode('Contenido por defecto'),
+                ],
+            ),
+        ]);
+
+        $php = $generator->generate($ast);
+
+        self::assertStringContainsString("'default' =>", $php);
+        self::assertStringContainsString('Contenido por defecto', $php);
+    }
+
     public function test_generator_emits_slot_outlet_as_property_lookup(): void
     {
         $generator = new PhpAstGenerator();
@@ -56,6 +76,20 @@ final class PhpAstGeneratorSlotsTest extends TestCase
         $php = $generator->generate($ast);
 
         self::assertStringContainsString('$this->header', $php);
+        self::assertStringContainsString('Runtime::fragment([])', $php);
+    }
+
+    public function test_generator_emits_default_slot_outlet_as_property_lookup(): void
+    {
+        $generator = new PhpAstGenerator();
+
+        $ast = new FragmentNode([
+            new SlotOutletNode('default'),
+        ]);
+
+        $php = $generator->generate($ast);
+
+        self::assertStringContainsString('$this->default', $php);
         self::assertStringContainsString('Runtime::fragment([])', $php);
     }
 
@@ -73,6 +107,23 @@ final class PhpAstGeneratorSlotsTest extends TestCase
 
         self::assertStringContainsString('$this->header', $php);
         self::assertStringContainsString('Default header', $php);
+        self::assertStringContainsString('Runtime::fragment', $php);
+    }
+
+    public function test_generator_emits_default_slot_outlet_with_fallback(): void
+    {
+        $generator = new PhpAstGenerator();
+
+        $ast = new FragmentNode([
+            new SlotOutletNode('default', [
+                new TextNode('Fallback default'),
+            ]),
+        ]);
+
+        $php = $generator->generate($ast);
+
+        self::assertStringContainsString('$this->default', $php);
+        self::assertStringContainsString('Fallback default', $php);
         self::assertStringContainsString('Runtime::fragment', $php);
     }
 }
