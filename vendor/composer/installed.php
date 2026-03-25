@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'pcp/pcp',
-        'pretty_version' => '1.0.0+no-version-set',
-        'version' => '1.0.0.0',
-        'reference' => null,
+        'pretty_version' => 'dev-master',
+        'version' => 'dev-master',
+        'reference' => 'ba7b9d84146bdc3328389ce1ff190bdaca281a93',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -92,9 +92,9 @@
             'dev_requirement' => true,
         ),
         'pcp/pcp' => array(
-            'pretty_version' => '1.0.0+no-version-set',
-            'version' => '1.0.0.0',
-            'reference' => null,
+            'pretty_version' => 'dev-master',
+            'version' => 'dev-master',
+            'reference' => 'ba7b9d84146bdc3328389ce1ff190bdaca281a93',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
